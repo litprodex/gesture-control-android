@@ -1,7 +1,7 @@
 # Gesty – sterowanie telefonem gestami twarzy i dłoni
 
 Natywna aplikacja Android (Kotlin + Jetpack Compose). Przednia kamera + MediaPipe rozpoznają gesty
-twarzy i dłoni całkowicie lokalnie, a Ty przypisujesz każdemu gestowi akcję (muzyka, swipe, tap, akcje systemowe, otwarcie wybranej aplikacji).
+twarzy i dłoni całkowicie lokalnie, urzytkownik przypisujesz każdemu gestowi akcję (muzyka, swipe, tap, akcje systemowe, otwarcie wybranej aplikacji).
 Opcjonalnie: logowanie przez Google i synchronizacja gestów między telefonami przez własny serwer.
 
 ## 1. Jak to działa
@@ -38,9 +38,6 @@ w prawym górnym rogu) → Profil (stan logowania, synchronizacja, logowanie/wyl
 5. Podłącz telefon, wybierz go na górnym pasku i kliknij **Run ▶**.
 6. W aplikacji: zezwól na kamerę → włącz usługę dostępności „Gesty” → **Uruchom rozpoznawanie**.
 
-> Instalacja przez Android Studio używa tego samego klucza (`app/gesty-debug.keystore`) co APK,
-> które dostałeś, więc nadpisze obecną wersję bez utraty przypisań.
-
 ### Build z terminala
 ```bash
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
@@ -51,9 +48,9 @@ w prawym górnym rogu) → Profil (stan logowania, synchronizacja, logowanie/wyl
 ## 3. Struktura projektu
 
 ```
-config.properties                   ← WEB_CLIENT_ID i API_BASE_URL (jedno miejsce)
+config.properties                   ← WEB_CLIENT_ID i API_BASE_URL 
 app/
-├── google-services.json            ← wrzucasz sam (z Firebase), nie ma go w repo
+├── google-services.json            ← z Firebase, nie ma go w repo
 ├── gesty-debug.keystore            klucz podpisu (debug i release)
 └── src/main/java/com/gesturecontrol/app/
     ├── AppConfig.kt                odczyt konfiguracji, wykrywanie placeholderów
@@ -86,7 +83,7 @@ server/ (TODO)
 
 1. Dodaj wpis w `model/GestureType.kt` (emoji, nazwa, kategoria FACE/HAND).
 2. Wykryj go:
-   - twarz → `FaceGestureLogic.update()` (masz mapę blendshapes, np. `jawOpen`, `eyeBlinkLeft`),
+   - twarz → `FaceGestureLogic.update()` (mapa blendshapes, np. `jawOpen`, `eyeBlinkLeft`),
    - dłoń → `HandShapeClassifier` (geometria punktów) albo mapowanie nazwy z MediaPipe w `GestureCameraService`.
 3. Wywołaj `onGesture(GestureType.TWOJ_GEST)`. UI i wybór akcji pojawią się automatycznie.
 
@@ -103,15 +100,15 @@ Lista apek wymaga `<queries>` w manifeście (Android 11+).
 
 - Progi ust: `FaceGestureLogic.setMouthLevel()` (Lekko/Średnio/Mocno) i `doomOpenThreshold`.
 - Czas między akcjami: `ACTION_COOLDOWN_MS` i `DOOM_COOLDOWN_MS` w `GestureCameraService`.
-- 🖕: progi w `HandShapeClassifier.kt`.
+- Dłonie: progi w `HandShapeClassifier.kt`.
 
 Podgląd logów: Android Studio → **Logcat**, filtr `GestureCameraService`.
 
 ## 8. Wydawanie nowej wersji
 
 1. Podbij `versionCode` (i `versionName`) w `app/build.gradle.kts`.
-2. `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk` (szczegóły w checkliście, krok 6).
-3. **Nie zmieniaj ani nie usuwaj `app/gesty-debug.keystore`** – inaczej aktualizacja nie zainstaluje się
+2. `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk` 
+3. **Nie usuwać `app/gesty-debug.keystore`** – inaczej aktualizacja nie zainstaluje się
    na starą wersję (trzeba będzie odinstalować i stracić ustawienia).
 
 ## 9. Ograniczenia
