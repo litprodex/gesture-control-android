@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Gesty</string>
+    <string name="accessibility_label">Gesty – wykonywanie akcji</string>
+    <string name="accessibility_description">Pozwala aplikacji Gesty przewijać ekran, tapać i wykonywać akcje systemowe po rozpoznaniu gestu twarzy lub dłoni. Aplikacja nie czyta treści ekranu.</string>
+</resources>

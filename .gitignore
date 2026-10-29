@@ -1,0 +1,18 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+server/
+
+# Sekrety – nigdy do repo
+app/google-services.json
+keystore.properties
+*.jks
+server/service-account.json
+server/*.db
+server/*.db-*
+server/.venv/
+__pycache__/
+
+*.keystore
