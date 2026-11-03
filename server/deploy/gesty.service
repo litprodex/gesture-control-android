@@ -1,0 +1,23 @@
+# /etc/systemd/system/gesty.service
+[Unit]
+Description=Gesty API (FastAPI + uvicorn)
+After=network.target
+
+[Service]
+User=gesty
+Group=gesty
+WorkingDirectory=/opt/gesty/server
+Environment=GESTY_DB=/opt/gesty/data/gesty.db
+Environment=FIREBASE_CREDENTIALS=/opt/gesty/server/service-account.json
+ExecStart=/opt/gesty/server/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers
+Restart=always
+RestartSec=3
+# Utwardzenie
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/gesty/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

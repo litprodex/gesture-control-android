@@ -1,0 +1,6 @@
+# /etc/caddy/Caddyfile  – podmień api.twojadomena.pl na swoją domenę
+# Caddy sam pobierze i odnowi certyfikat HTTPS (Let's Encrypt).
+api.twojadomena.pl {
+    encode gzip
+    reverse_proxy 127.0.0.1:8000
+}
