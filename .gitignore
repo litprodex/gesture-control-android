@@ -4,14 +4,16 @@ local.properties
 .idea/
 *.iml
 
-# Sekrety – nigdy do repo
+# Sekrety i lokalna konfiguracja – nigdy do repo
+# Wzorzec: config.properties.example (ten plik jest w repo)
 app/google-services.json
+config.properties
 keystore.properties
 *.jks
+*.keystore
 server/service-account.json
 server/*.db
 server/*.db-*
 server/.venv/
 __pycache__/
 
-*.keystore

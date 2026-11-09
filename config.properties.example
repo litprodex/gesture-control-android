@@ -1,6 +1,8 @@
 # ============================================================
 #  Gesty – JEDYNE miejsce na konfigurację logowania i serwera
 # ============================================================
+# Skopiuj ten plik jako config.properties i wpisz własne wartości.
+# config.properties jest w .gitignore i nie trafia do repozytorium.
 # Po zmianie: zbuduj apkę ponownie (Build > Rebuild / gradlew assembleRelease).
 # Dopóki są tu placeholdery, apka działa normalnie w trybie „bez logowania”.
 

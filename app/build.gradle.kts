@@ -15,7 +15,7 @@ if (firebaseConfigured) {
     logger.warn("Gesty: brak app/google-services.json – logowanie Google wyłączone, apka działa bez konta.")
 }
 
-// ---- Web client ID i adres API: jedno miejsce, plik config.properties w katalogu projektu ----
+// ---- Web client ID i adres API: config.properties (wzorzec: config.properties.example) ----
 val appConfig = Properties().apply {
     rootProject.file("config.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }

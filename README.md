@@ -38,6 +38,8 @@ w prawym górnym rogu) → Profil (stan logowania, synchronizacja, logowanie/wyl
 5. Podłącz telefon, wybierz go na górnym pasku i kliknij **Run ▶**.
 6. W aplikacji: zezwól na kamerę → włącz usługę dostępności „Gesty” → **Uruchom rozpoznawanie**.
 
+Logowanie Google i synchronizacja są opcjonalne. Skopiuj `config.properties.example` jako `config.properties` i wpisz `WEB_CLIENT_ID` oraz `API_BASE_URL`. Plik z prawdziwymi wartościami jest w `.gitignore`. Bez niego apka działa lokalnie, bez konta.
+
 ### Build z terminala
 ```bash
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
@@ -48,7 +50,7 @@ w prawym górnym rogu) → Profil (stan logowania, synchronizacja, logowanie/wyl
 ## 3. Struktura projektu
 
 ```
-config.properties                   ← WEB_CLIENT_ID i API_BASE_URL 
+config.properties.example           ← wzór WEB_CLIENT_ID i API_BASE_URL (skopiuj na config.properties) 
 app/
 ├── google-services.json            ← z Firebase, nie ma go w repo
 ├── gesty-debug.keystore            klucz podpisu (debug i release)
