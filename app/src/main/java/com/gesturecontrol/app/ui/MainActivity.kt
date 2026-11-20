@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import com.gesturecontrol.app.R
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -43,6 +44,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.ImeAction
 import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.gesturecontrol.app.data.AppList
@@ -94,6 +106,7 @@ fun GestyApp() {
     var screen by rememberSaveable {
         mutableStateOf(if (user != null || prefs.getBoolean("onboarding_done", false)) Screen.HOME else Screen.WELCOME)
     }
+
 
     // Po zalogowaniu: pomijamy powitanie i synchronizujemy gesty
     LaunchedEffect(user?.uid) {
@@ -160,6 +173,7 @@ fun HomeScreen(onOpenProfile: () -> Unit) {
     var a11y by remember { mutableStateOf(GestureAccessibilityService.isEnabled(context)) }
     var editing by remember { mutableStateOf<GestureType?>(null) }
     var pickingApp by remember { mutableStateOf<GestureType?>(null) }
+    var showInstructionDialog by remember { mutableStateOf(false) }
 
     LifecycleResumeEffect(Unit) {
         hasCamera = context.has(Manifest.permission.CAMERA)
@@ -231,6 +245,12 @@ fun HomeScreen(onOpenProfile: () -> Unit) {
                         contentPadding = PaddingValues(vertical = 14.dp, horizontal = 16.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) { Text(if (running) "Zatrzymaj rozpoznawanie" else "Uruchom rozpoznawanie") }
+                    OutlinedButton(
+                        onClick = { showInstructionDialog = true },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) { 
+                        Text("Jak włączyć usługę? (Instrukcja)") 
+                    }
                 }
             }
         }
@@ -302,6 +322,10 @@ fun HomeScreen(onOpenProfile: () -> Unit) {
             onSelect = { repo.setApp(gesture, it.packageName); pickingApp = null },
             onDismiss = { pickingApp = null }
         )
+    }
+
+    if (showInstructionDialog) {
+        InstructionDialog(onDismiss = { showInstructionDialog = false })
     }
 }
 
@@ -697,6 +721,122 @@ private fun ActionPickerSheet(
                     )
                 }
             }
+        }
+    }
+}
+// --- WKLEJ TO NA SAMYM DOLE PLIKU ---
+
+@Composable
+fun InstructionDialog(onDismiss: () -> Unit) {
+    // Zakładamy, że masz 8 screenów w res/drawable nazwanych od instrukcja_1 do instrukcja_8
+    val instructionImages = listOf(
+        R.drawable.instrukcja_1, // Dodaj swoje pliki do res/drawable!
+        R.drawable.instrukcja_2,
+        R.drawable.instrukcja_3,
+        R.drawable.instrukcja_4,
+        R.drawable.instrukcja_5
+       
+    )
+    
+    val pagerState = rememberPagerState(pageCount = { instructionImages.size })
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Instrukcja uruchomienia (${pagerState.currentPage + 1}/${instructionImages.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(16.dp)
+                )
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f)
+                ) { page ->
+                    // Przykładowe parametry ramek - musisz je dostosować (wartości od 0f do 1f)
+                    HighlightedScreenshot(
+                        imageRes = instructionImages[page],
+                        highlightOffsetX = 0.1f, 
+                        highlightOffsetY = 0.5f,
+                        highlightWidth = 0.8f,
+                        highlightHeight = 0.1f,
+                        stepNumber = page + 1
+                    )
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text("Zamknij")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HighlightedScreenshot(
+    imageRes: Int,
+    highlightOffsetX: Float,
+    highlightOffsetY: Float,
+    highlightWidth: Float,
+    highlightHeight: Float,
+    stepNumber: Int
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource(id = imageRes),
+            contentDescription = "Krok $stepNumber",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit
+        )
+
+        val w = maxWidth
+        val h = maxHeight
+
+        Box(
+            modifier = Modifier
+                .offset(x = w * highlightOffsetX, y = h * highlightOffsetY)
+                .size(width = w * highlightWidth, height = h * highlightHeight)
+                .border(
+                    width = 4.dp, 
+                    color = Color(0xFFFF5722),
+                    shape = RoundedCornerShape(12.dp)
+                )
+        )
+
+        Box(
+            modifier = Modifier
+                .offset(
+                    x = (w * highlightOffsetX) - 16.dp, 
+                    y = (h * highlightOffsetY) - 16.dp
+                )
+                .size(32.dp)
+                .background(Color(0xFFFF5722), CircleShape)
+                .shadow(4.dp, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = stepNumber.toString(),
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
