@@ -6,6 +6,7 @@ After=network.target
 [Service]
 User=gesty
 Group=gesty
+UMask=0027
 WorkingDirectory=/opt/gesty/server
 Environment=GESTY_DB=/opt/gesty/data/gesty.db
 Environment=FIREBASE_CREDENTIALS=/opt/gesty/server/service-account.json

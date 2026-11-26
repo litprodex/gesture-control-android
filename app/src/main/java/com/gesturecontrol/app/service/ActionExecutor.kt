@@ -20,17 +20,24 @@ class ActionExecutor(private val context: Context) {
         ActionType.MEDIA_PLAY_PAUSE -> mediaKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
         ActionType.VOLUME_UP -> volume(AudioManager.ADJUST_RAISE)
         ActionType.VOLUME_DOWN -> volume(AudioManager.ADJUST_LOWER)
-        else -> {
-            val svc = GestureAccessibilityService.instance
-            if (svc == null) {
-                Toast.makeText(
-                    context,
-                    "Włącz usługę dostępności „Gesty”, żeby ta akcja działała",
-                    Toast.LENGTH_SHORT
-                ).show()
-                false
-            } else svc.perform(action)
+        ActionType.TAKE_SELFIE -> GestureCameraService.takeSelfie(context)
+        ActionType.BACK -> {
+            if (GestureCameraService.dismissSelfiePreview()) true
+            else performAccessibility(action)
         }
+        else -> performAccessibility(action)
+    }
+
+    private fun performAccessibility(action: ActionType): Boolean {
+        val svc = GestureAccessibilityService.instance
+        return if (svc == null) {
+            Toast.makeText(
+                context,
+                "Włącz usługę dostępności „Gesty”, żeby ta akcja działała",
+                Toast.LENGTH_SHORT
+            ).show()
+            false
+        } else svc.perform(action)
     }
 
     /**

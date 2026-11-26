@@ -75,6 +75,29 @@ def test_sync_scalanie_ostatni_wygrywa(client):
     assert {m["gesture"]: m["action"] for m in client.get("/sync", headers=A).json()["mappings"]}["THUMB_UP"] == "HOME"
 
 
+def test_akcje_zgodne_z_aplikacja():
+    """Każda akcja z ActionType.kt musi być znana serwerowi, inaczej cały /sync dostaje 422."""
+    kt = Path(__file__).resolve().parents[2] / "app/src/main/java/com/gesturecontrol/app/model/ActionType.kt"
+    if not kt.is_file():
+        pytest.skip("brak kodu aplikacji obok serwera")
+    import re
+    body = kt.read_text(encoding="utf-8").split("enum class ActionType", 1)[1]
+    app_actions = set(re.findall(r"^\s+([A-Z_]+)\(", body, re.M))
+    assert app_actions == server.ACTIONS
+
+
+def test_sync_z_selfie(client):
+    body = {"mappings": [
+        {"gesture": "VICTORY", "action": "TAKE_SELFIE", "updated_at": 100},
+        {"gesture": "THUMB_UP", "action": "HOME", "updated_at": 100},
+    ]}
+    r = client.post("/sync", json=body, headers=A)
+    assert r.status_code == 200
+    assert {m["gesture"]: m["action"] for m in r.json()["mappings"]} == {"VICTORY": "TAKE_SELFIE", "THUMB_UP": "HOME"}
+    r = client.put("/mappings/SMILE", json={"action": "TAKE_SELFIE", "updated_at": 1}, headers=A)
+    assert r.status_code == 200 and r.json()["app_package"] is None
+
+
 def test_dane_oddzielone_per_uid(client):
     client.put("/mappings/SMILE", json={"action": "SCREENSHOT", "updated_at": 1}, headers=A)
     assert client.get("/sync", headers=B).json()["mappings"] == []

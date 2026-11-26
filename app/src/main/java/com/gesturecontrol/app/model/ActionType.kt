@@ -6,6 +6,7 @@ enum class ActionGroup(val title: String) {
     TOUCH("Przewijanie i dotyk"),
     APPS("Aplikacje"),
     SYSTEM("System"),
+    CAMERA("Aparat"),
 }
 
 /** Akcje, które można przypisać do gestu. */
@@ -37,7 +38,9 @@ enum class ActionType(
     RECENTS("🗂", "Ostatnie aplikacje", ActionGroup.SYSTEM, true),
     NOTIFICATIONS("🔔", "Powiadomienia", ActionGroup.SYSTEM, true),
     SCREENSHOT("📸", "Zrzut ekranu", ActionGroup.SYSTEM, true),
-    LOCK_SCREEN("🔒", "Zablokuj ekran", ActionGroup.SYSTEM, true);
+    LOCK_SCREEN("🔒", "Zablokuj ekran", ActionGroup.SYSTEM, true),
+
+    TAKE_SELFIE("🤳", "Zrób selfie", ActionGroup.CAMERA, false);
 
     val display: String get() = "$emoji $label"
 }

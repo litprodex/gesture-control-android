@@ -5,21 +5,33 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.hardware.display.DisplayManager
+import android.media.MediaActionSound
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.MediaStore
+import android.provider.Settings
 import android.util.Log
 import android.util.Size
+import android.view.Display
+import android.view.Surface
+import android.widget.Toast
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -50,6 +62,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Usługa pierwszoplanowa: przednia kamera -> MediaPipe (twarz + dłoń) -> gest -> akcja.
@@ -67,13 +80,32 @@ class GestureCameraService : LifecycleService() {
     private var gestureRecognizer: GestureRecognizer? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysis: ImageAnalysis? = null
+    private var preview: Preview? = null
+    private var imageCapture: ImageCapture? = null
+    private lateinit var selfieOverlay: SelfiePreview
+    /** Podgląd pojawia się dopiero przy geście selfie, nie przy starcie rozpoznawania. */
+    private var previewDismissed = true
+    private var previewBroken = false
+    private var previousMappingChange: ((GestureType?) -> Unit)? = null
     private lateinit var settings: SettingsRepository
+    private val shutter = MediaActionSound()
+    private val captureInFlight = AtomicBoolean(false)
+    /** Fałsz tylko gdy sami zgasiliśmy kamerę przy wyłączonym ekranie. */
+    private var cameraWanted = true
+    private var lastAnalyzeAt = 0L
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> if (settings.pauseOnScreenOff.value) unbindCamera()
-                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> bindCamera()
+                Intent.ACTION_SCREEN_OFF -> if (settings.pauseOnScreenOff.value) {
+                    cameraWanted = false
+                    selfieOverlay.hide()
+                    unbindCamera()
+                }
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
+                    cameraWanted = true
+                    refreshPreview()
+                }
             }
         }
     }
@@ -82,6 +114,7 @@ class GestureCameraService : LifecycleService() {
     private var lastFrameAt = 0L
     private var lastActionAt = 0L
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    private val photoNameFmt = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
 
     override fun onCreate() {
         super.onCreate()
@@ -96,6 +129,20 @@ class GestureCameraService : LifecycleService() {
         faceLogic = FaceGestureLogic(::onGesture)
         handLogic = HandGestureLogic(::onGesture)
         analysisExecutor = Executors.newSingleThreadExecutor()
+        selfieOverlay = SelfiePreview(this)
+        shutter.load(MediaActionSound.SHUTTER_CLICK)
+        selfieOverlay.onClosed = {
+            previewDismissed = true
+            cameraProvider?.unbindAll()
+            bindCamera()
+        }
+        previousMappingChange = repo.onLocalChange
+        repo.onLocalChange = { gesture ->
+            previousMappingChange?.invoke(gesture)
+            main.post { if (instance === this) refreshPreview() }
+        }
+        instance = this
+        main.post(cameraWatchdog)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -220,7 +267,21 @@ class GestureCameraService : LifecycleService() {
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                     .build()
                     .also { it.setAnalyzer(analysisExecutor, ::analyze) }
+                preview = Preview.Builder().build()
+                imageCapture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(1920, 1080),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                                )
+                            ).build()
+                    )
+                    .build()
                 bindCamera()
+                refreshPreview()
             } catch (e: Exception) {
                 Log.e(TAG, "Nie udało się uruchomić kamery", e)
                 stopSelf()
@@ -228,17 +289,51 @@ class GestureCameraService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    /** Włącza kamerę (np. po odblokowaniu ekranu). */
+    /** Włącza kamerę (np. po odblokowaniu ekranu). Podgląd, analiza i zdjęcie dzielą jedną sesję. */
     private fun bindCamera() {
+        if (!cameraWanted) return
         val provider = cameraProvider ?: return
         val useCase = analysis ?: return
-        if (provider.isBound(useCase)) return
+        val livePreview = preview?.takeIf { selfieOverlay.isShowing }
+        val capture = imageCapture
+        livePreview?.setSurfaceProvider(selfieOverlay.surfaceProvider)
+        val wanted = listOfNotNull(livePreview, useCase, capture)
+        if (wanted.all { provider.isBound(it) }) return
         try {
             provider.unbindAll()
-            provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, useCase)
+            try {
+                provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, *wanted.toTypedArray())
+            } catch (e: Exception) {
+                Log.w(TAG, "Podgląd albo zdjęcie niedostępne, zostaje samo rozpoznawanie", e)
+                imageCapture = null
+                preview = null
+                previewBroken = true
+                selfieOverlay.hide()
+                provider.unbindAll()
+                provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, useCase)
+            }
+            lastAnalyzeAt = SystemClock.uptimeMillis()
             GestureBus.paused.value = false
         } catch (e: Exception) {
             Log.e(TAG, "bindCamera", e)
+        }
+    }
+
+    private fun selfieWanted(): Boolean = repo.mappings.value.values.any { it == ActionType.TAKE_SELFIE }
+
+    /** Pokazuje kadr, gdy selfie jest przypisane i system pozwala rysować nad innymi aplikacjami. */
+    private fun refreshPreview() {
+        val show = cameraWanted && !previewDismissed && !previewBroken &&
+            selfieWanted() && Settings.canDrawOverlays(this)
+        if (show) {
+            if (selfieOverlay.show()) {
+                cameraProvider?.unbindAll()
+                bindCamera()
+            }
+        } else if (selfieOverlay.isShowing) {
+            selfieOverlay.hide()
+            cameraProvider?.unbindAll()
+            bindCamera()
         }
     }
 
@@ -251,6 +346,7 @@ class GestureCameraService : LifecycleService() {
 
     private fun analyze(image: ImageProxy) {
         val now = SystemClock.uptimeMillis()
+        lastAnalyzeAt = now
         val frameInterval = 1000L / settings.fps.value
         if (now - lastFrameAt < frameInterval) {
             image.close(); return
@@ -292,11 +388,99 @@ class GestureCameraService : LifecycleService() {
         }
     }
 
+    /**
+     * Zapisuje selfie do galerii tą samą przednią kamerą, która rozpoznaje gesty.
+     * Nie otwieramy aplikacji Aparat, bo ona zabiera kamerę i skanowanie samo nie wraca.
+     */
+    private fun captureSelfie(): Boolean {
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(
+                this,
+                "Zezwól na podgląd nad innymi aplikacjami, żeby widzieć zdjęcie",
+                Toast.LENGTH_LONG
+            ).show()
+            return false
+        }
+        if (!selfieOverlay.isShowing) {
+            previewDismissed = false
+            refreshPreview()
+            Toast.makeText(this, "Ustaw kadr w podglądzie i powtórz gest", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val capture = imageCapture
+        if (capture == null || !cameraWanted) {
+            Toast.makeText(this, "Uruchom rozpoznawanie, żeby zrobić zdjęcie", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        if (!captureInFlight.compareAndSet(false, true)) return true
+        capture.targetRotation = displayRotation()
+        val name = "Gesty_${photoNameFmt.format(Date())}.jpg"
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, name)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "${Environment.DIRECTORY_PICTURES}/Gesty")
+            }
+        }
+        val options = ImageCapture.OutputFileOptions.Builder(
+            contentResolver,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            values
+        ).build()
+        shutter.play(MediaActionSound.SHUTTER_CLICK)
+        capture.takePicture(
+            options,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    captureInFlight.set(false)
+                    selfieOverlay.flashSaved()
+                    Log.i(TAG, "Selfie zapisane: ${output.savedUri}")
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    captureInFlight.set(false)
+                    Log.e(TAG, "Nie udało się zapisać selfie", exception)
+                    Toast.makeText(
+                        this@GestureCameraService,
+                        "Nie udało się zapisać zdjęcia",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        )
+        return true
+    }
+
+    private fun displayRotation(): Int {
+        val display = getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+        return display?.rotation ?: Surface.ROTATION_0
+    }
+
+    /** Gdy inna aplikacja zabierze kamerę, klatki milkną. Po zwolnieniu podpinamy ją z powrotem. */
+    private val cameraWatchdog = object : Runnable {
+        override fun run() {
+            val silentFor = SystemClock.uptimeMillis() - lastAnalyzeAt
+            if (cameraWanted && lastAnalyzeAt != 0L && silentFor > CAMERA_STALL_MS) {
+                Log.w(TAG, "Kamera milczy, podpinam ponownie")
+                cameraProvider?.unbindAll()
+                bindCamera()
+            }
+            refreshPreview()
+            main.postDelayed(this, CAMERA_WATCH_MS)
+        }
+    }
+
     override fun onDestroy() {
+        if (instance === this) instance = null
+        if (repo.onLocalChange != null) repo.onLocalChange = previousMappingChange
         GestureBus.serviceRunning.value = false
         GestureBus.paused.value = false
+        main.removeCallbacks(cameraWatchdog)
+        selfieOverlay.hide()
         runCatching { unregisterReceiver(screenReceiver) }
         cameraProvider?.unbindAll()
+        shutter.release()
         analysisExecutor.shutdown()
         faceLandmarker?.close()
         gestureRecognizer?.close()
@@ -313,5 +497,20 @@ class GestureCameraService : LifecycleService() {
         private const val ACTION_COOLDOWN_MS = 900L    // minimalny odstęp między akcjami
         private const val DOOM_COOLDOWN_MS = 350L      // w trybie doom scrolling
         private const val MIN_HAND_SCORE = 0.65f
+        private const val CAMERA_STALL_MS = 3000L
+        private const val CAMERA_WATCH_MS = 2000L
+
+        @Volatile private var instance: GestureCameraService? = null
+
+        fun takeSelfie(context: Context): Boolean {
+            val svc = instance
+            if (svc == null) {
+                Toast.makeText(context, "Uruchom rozpoznawanie, żeby zrobić zdjęcie", Toast.LENGTH_SHORT).show()
+                return false
+            }
+            return svc.captureSelfie()
+        }
+
+        fun dismissSelfiePreview(): Boolean = instance?.selfieOverlay?.dismiss() == true
     }
 }

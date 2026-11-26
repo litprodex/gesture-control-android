@@ -34,8 +34,8 @@ android {
         applicationId = "com.gesturecontrol.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 15
+        versionName = "2.3"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
 
         buildConfigField("String", "WEB_CLIENT_ID", "\"${cfg("WEB_CLIENT_ID")}\"")
@@ -96,6 +96,7 @@ dependencies {
     implementation("androidx.camera:camera-core:$camerax")
     implementation("androidx.camera:camera-camera2:$camerax")
     implementation("androidx.camera:camera-lifecycle:$camerax")
+    implementation("androidx.camera:camera-view:$camerax")
 
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
 

@@ -13,7 +13,7 @@ Credential Manager → Google ID token
         ↓
 Firebase Auth (signInWithCredential)
         ↓  Firebase ID token (1 h, odświeżany sam)
-OkHttp: Authorization: Bearer <token>  →  Caddy (HTTPS) → uvicorn/FastAPI
+OkHttp: Authorization: Bearer <token>  →  Cloudflare Tunnel (HTTPS) → uvicorn/FastAPI
                                            firebase-admin.verify_id_token → uid
                                            SQLite: dane per uid
 ```
@@ -71,7 +71,7 @@ server/ (TODO)
 ├── schema.sql                      tabele: users, devices, gesture_mappings, user_settings
 ├── requirements.txt / -dev.txt
 ├── tests/test_api.py               testy (pytest)
-└── deploy/                         gesty.service (systemd), Caddyfile, backup.sh
+└── deploy/                         gesty.service, gesty-tunnel.service (systemd), backup.sh, README.md (wdrożenie)
 ```
 
 ## 4. Stack
@@ -79,7 +79,7 @@ server/ (TODO)
 - Kotlin 2.0.20, JVM 17, Gradle 8.9, AGP 8.5.2, minSdk 26, target/compileSdk 35
 - Jetpack Compose (BOM 2024.09.03), Material 3, CameraX 1.3.4, MediaPipe Tasks Vision 0.10.14
 - Firebase Auth (BOM 33.7.0), Credential Manager 1.3.0 + Google ID 1.1.1, OkHttp 4.12
-- Serwer: Python, FastAPI, uvicorn, firebase-admin, SQLite; Caddy (HTTPS), systemd
+- Serwer: Python, FastAPI, uvicorn, firebase-admin, SQLite; Cloudflare Tunnel (HTTPS), systemd
 
 ## 5. Jak dodać nowy gest
 
@@ -89,7 +89,9 @@ server/ (TODO)
    - dłoń → `HandShapeClassifier` (geometria punktów) albo mapowanie nazwy z MediaPipe w `GestureCameraService`.
 3. Wywołaj `onGesture(GestureType.TWOJ_GEST)`. UI i wybór akcji pojawią się automatycznie.
 
-Nowa akcja: wpis w `model/ActionType.kt` + obsługa w `ActionExecutor.kt`.
+Nowa akcja: wpis w `model/ActionType.kt` + obsługa w `ActionExecutor.kt` + nazwa w `ACTIONS` w `server/app.py`.
+Serwer trzeba wdrożyć przed nowym APK, inaczej nieznana akcja zwraca 422 i synchronizacja staje
+(wdrożenie bez zmiany adresu tunelu: `server/deploy/README.md`). To samo dotyczy nowego gestu (`GESTURES`).
 
 ## 6. Otwieranie aplikacji
 

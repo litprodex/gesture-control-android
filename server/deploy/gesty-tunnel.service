@@ -1,0 +1,19 @@
+# /etc/systemd/system/gesty-tunnel.service
+# Szybki tunel Cloudflare (trycloudflare.com): adres losuje się przy KAŻDYM starcie tej usługi.
+# Uwaga: Requires=gesty.service sprawia, że `systemctl restart gesty` restartuje też tunel.
+# Aktualizację kodu rób przez SIGHUP (patrz deploy/README.md), nie przez restart.
+[Unit]
+Description=Gesty Cloudflare quick tunnel (HTTPS obok Caddy)
+After=network-online.target gesty.service
+Wants=network-online.target
+Requires=gesty.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --protocol http2 --url http://127.0.0.1:8000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

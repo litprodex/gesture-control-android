@@ -85,5 +85,12 @@ class GestureAccessibilityService : AccessibilityService() {
             ) ?: return false
             return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
         }
+
+        /** Na One UI ekran przełącznika i lista zainstalowanych usług nie są dostępne dla zwykłych aplikacji. */
+        fun openSettings(context: Context) {
+            context.startActivity(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
     }
 }

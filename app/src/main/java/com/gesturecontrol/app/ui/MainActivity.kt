@@ -8,6 +8,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -158,12 +159,15 @@ fun HomeScreen(onOpenProfile: () -> Unit) {
 
     var hasCamera by remember { mutableStateOf(context.has(Manifest.permission.CAMERA)) }
     var a11y by remember { mutableStateOf(GestureAccessibilityService.isEnabled(context)) }
+    var canOverlay by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    val selfieOn = mappings.values.any { it == ActionType.TAKE_SELFIE }
     var editing by remember { mutableStateOf<GestureType?>(null) }
     var pickingApp by remember { mutableStateOf<GestureType?>(null) }
 
     LifecycleResumeEffect(Unit) {
         hasCamera = context.has(Manifest.permission.CAMERA)
         a11y = GestureAccessibilityService.isEnabled(context)
+        canOverlay = Settings.canDrawOverlays(context)
         onPauseOrDispose { }
     }
 
@@ -213,9 +217,17 @@ fun HomeScreen(onOpenProfile: () -> Unit) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SetupStep("Dostęp do kamery", hasCamera, "Zezwól") { requestPerms() }
                     SetupStep("Usługa dostępności", a11y, "Włącz") {
-                        context.startActivity(
-                            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
+                        GestureAccessibilityService.openSettings(context)
+                    }
+                    if (selfieOn) {
+                        SetupStep("Podgląd selfie", canOverlay, "Zezwól") {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                            )
+                        }
                     }
                     Button(
                         onClick = {
